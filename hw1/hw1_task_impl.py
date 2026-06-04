@@ -11,10 +11,23 @@ import torch
 
 
 def lowest_ai_fn(x: torch.Tensor) -> torch.Tensor:
-    """Lowest arithmetic intensity baseline (0 FLOP/Byte)."""
-    # TODO (1 line): implement a lowest-AI op
-    pass
+    """
+    Lowest arithmetic intensity baseline (0 FLOP/Byte).
+    
+    Options:
+    1/ torch copy stuff
 
+    2/ create, write new tensors
+
+    3/ reshapes, transposes
+    """
+    shape = x.shape
+    for _ in range(100):
+        x = x.T
+        x = x.T
+        x = x.reshape(-1)
+        x = x.reshape(shape)
+    return x
 
 # TASK 1b: Implement a function with configurable arithmetic intensity.
 # Build an element-wise compute operation where work increases with `num_ops`.
@@ -37,10 +50,13 @@ def make_compute_fn(num_ops: int, compiled: bool = True):
     """Return an eager or compiled function whose work scales with num_ops."""
 
     def fn(x: torch.Tensor) -> torch.Tensor:
-        pass
+        acc = torch.zeros_like(x)
+        for _ in range(num_ops):
+            acc = acc * x + x
+        return acc
 
     # TODO (1 line): return either `fn` or `torch.compile(fn)` based on `compiled`
-    pass
+    return torch.compile(fn) if compiled else fn
 
 
 # ============================================================================
@@ -63,7 +79,18 @@ def benchmark_fn(fn, *args, warmup=25, rep=100) -> float:
     torch.cuda.synchronize()
 
     # TODO: time `rep` runs using CUDA events and return median latency (ms)
-    pass
+    times = []
+    for _ in range(rep):
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        fn(*args)
+        end.record()
+        torch.cuda.synchronize()
+        ms = start.elapsed_time(end)
+        times.append(ms)
+    return torch.tensor(times).median().item()
+
 
 
 # TASK 3: Compute element-wise operation metrics from measured runtime.
@@ -83,8 +110,15 @@ def benchmark_fn(fn, *args, warmup=25, rep=100) -> float:
 
 
 def compute_elementwise_metrics(num_elements, num_ops, bytes_per_element, ms, variant):
-    # TODO: compute total FLOPs, arithmetic intensity, and achieved FLOP/s
-    pass
+    total_flops = 2 * num_ops * num_elements
+
+    if variant == "compiled":
+        total_bytes = 2 * num_elements * bytes_per_element
+    else:
+        total_bytes = 6 * num_ops * num_elements * bytes_per_element
+
+    ai = total_flops / total_bytes
+    achieved_flops = total_flops / (ms * 1e-3)
     return total_flops, ai, achieved_flops
 
 
