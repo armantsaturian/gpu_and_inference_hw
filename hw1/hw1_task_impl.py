@@ -131,12 +131,29 @@ def compute_elementwise_metrics(num_elements, num_ops, bytes_per_element, ms, va
 # Why does performance rise as arithmetic intensity increases even though the
 # measured runtime changes only a little?
 #
+# The ops are memory-bound: runtime is dominated by HBM read/write, and the
+# ALU work hides behind that latency. Runtime stays ~constant but total FLOPs
+# grows linearly with num_ops, so FLOP/s = flops/time rises proportionally.
+#
 # Q2. In one sample run, `matmul 1024x1024` achieved lower FLOP/s than the
 # `128 ops` compiled element-wise operation. Give one or two reasons why that can
 # happen on a large GPU like an H100.
+#
+# A 1024x1024 matmul is too small to saturate all 132 SMs on the H100.
+# Many SMs sit idle because there aren't enough threadblocks. The 128-ops kernel
+# works on 64M elements and trivially fills the entire GPU.
 #
 # Q3. Between `64 ops` and `128 ops`, runtime increases more noticeably than it
 # did for smaller operations. What does that suggest about what resource is
 # becoming the bottleneck?
 #
+# Compute is becoming the bottleneck. The operation is crossing from
+# memory-bound into compute-bound territory (near the ridge point), so memory
+# latency can no longer hide all the arithmetic and runtime starts growing.
+#
 # Q4. Why do the eager `ops-K` points look so different from the compiled ones?
+#
+# Without fusion, each iteration launches separate mul/add kernels that each
+# read and write the full tensor. AI stays constant at 1/12 regardless of
+# num_ops (compute and memory traffic scale together), so all eager points
+# collapse to the same spot on the roofline, stuck memory-bound at low throughput.
