@@ -40,7 +40,7 @@ def profile(loop_fn, model, input_ids, trace_name: str):
 
 
 def generate_optimized(optimized_trace_name: str) -> float:
-    model = build_model(torch.float32)
+    model = build_model(torch.float16)
     input_ids = get_input_ids()
     profile(optimized_loop, model, input_ids, optimized_trace_name)
     elapsed = time_generation(optimized_loop, model, input_ids, "Optimized")
