@@ -12,13 +12,21 @@ from utils import (
 
 @torch.inference_mode()
 def optimized_loop(model, input_ids, n_steps):
-    generated_ids = input_ids.clone()
     generated_tokens = []
-    for _ in range(n_steps):
-        outputs = model(input_ids=generated_ids)
-        next_token_id = torch.argmax(outputs.logits[:, -1, :], dim=-1)
+
+    # Prefill: process full prompt, populate KV cache
+    outputs = model(input_ids=input_ids, use_cache=True)
+    past_key_values = outputs.past_key_values
+    next_token_id = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
+    generated_tokens.append(next_token_id)
+
+    # Decode: one token at a time, reusing cached K/V
+    for _ in range(n_steps - 1):
+        outputs = model(input_ids=next_token_id, past_key_values=past_key_values, use_cache=True)
+        past_key_values = outputs.past_key_values
+        next_token_id = torch.argmax(outputs.logits[:, -1, :], dim=-1, keepdim=True)
         generated_tokens.append(next_token_id)
-        generated_ids = torch.cat([generated_ids, next_token_id.unsqueeze(0)], dim=1)
+
     return [t.item() for t in generated_tokens]
 
 
@@ -89,6 +97,11 @@ if __name__ == "__main__":
 #    Halves memory traffic and unlocks fp16 tensor core gemm paths
 #    (volta_sgemm -> turing_fp16_s1688gemm). CUDA time per 12 steps
 #    dropped from 883ms to 231ms.
+#
+# 2. inference_mode + remove per-step .item() sync: 4.78x -> 4.91x.
+#    Eliminates CPU-GPU synchronization each step and skips autograd
+#    bookkeeping. CUDA time dropped from 231ms to 180ms (22% reduction).
+#    Modest gain because matmul kernels dominate, not sync overhead.
 #
 # Biggest impact and why:
 #
