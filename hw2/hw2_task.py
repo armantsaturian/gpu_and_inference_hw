@@ -103,10 +103,10 @@ if __name__ == "__main__":
 #    bookkeeping. CUDA time dropped from 231ms to 180ms (22% reduction).
 #    Modest gain because matmul kernels dominate, not sync overhead.
 #
-# 3. KV cache: 4.91x -> 27.82x (0.38s for 128 tokens, 334 tok/s on T4).
+# 3. KV cache: 36.53x total (14.49s -> 0.40s, 323 tok/s on T4).
 #    Each decode step now processes 1 token instead of the full growing
 #    sequence. Eliminates O(n^2) redundant attention recomputation.
-#    CUDA time per 12 steps dropped from 180ms to 33ms. Matmuls became
+#    CUDA time per 12 steps dropped from 1274ms to 45ms. Matmuls became
 #    matrix-vector ops (gemvx) instead of full gemm.
 #
 # Biggest impact and why:
